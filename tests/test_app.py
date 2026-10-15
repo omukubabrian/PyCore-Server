@@ -1,26 +1,60 @@
 
-
 import sys
-from  pathlib import Path
+from pathlib import Path
 
 import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-
 import app as server
+from database import get_db_connection as real_get_db_connection
+
+
 @pytest.fixture
 def client():
-    # Reset the temporary data before each test
-    server.students = [
-        {"id": 1, "name": "Brian", "course": "Computer science"},
-        {"id": 2, "name": "Benita", "course": "Information Technology"}
-    ]
-    server.next_student_id = 3
+    # Save the original database connection function.
+    original_get_db_connection = server.get_db_connection
 
+    # Redirect API database connections to the test database.
+    server.get_db_connection = (
+        lambda: real_get_db_connection("pycore_test")
+    )
     server.app.config["TESTING"] = True
 
-    with server.app.test_client() as test_client:
-        yield test_client
+    try:
+        # Prepare predictable records before each test.
+        connection = real_get_db_connection("pycore_test")
+
+        try:
+            cursor = connection.cursor()
+
+            try:
+                cursor.execute("DELETE FROM students")
+
+                cursor.execute(
+                    """
+                    INSERT INTO students (id, name, course)
+                    VALUES
+                        (1, 'Brian', 'Computer science'),
+                        (2, 'Benita', 'Information Technology')
+                    """
+                )
+
+                connection.commit()
+
+            finally:
+                cursor.close()
+
+        finally:
+            connection.close()
+
+        # Create the Flask test client.
+        with server.app.test_client() as test_client:
+            yield test_client
+
+    finally:
+        # Restore the original connection function.
+        server.get_db_connection = original_get_db_connection
 
 
 def test_get_all_students(client):
