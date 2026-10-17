@@ -1,8 +1,12 @@
 from database import get_db_connection
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 # Create our Flask application
 app = Flask(__name__)
+CORS(app, resources={
+    r"/*": {"origins": "http://127.0.0.1:5500"}
+})
 
 # HOME ENDPOINT: Provide basic project information
 @app.route("/", methods=["GET"])
